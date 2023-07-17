@@ -1,0 +1,4 @@
+.venv
+.diffusers
+__pycache__
+output.png
