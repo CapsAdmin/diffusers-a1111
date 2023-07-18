@@ -447,6 +447,12 @@ def load_checkpoint(path):
 def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
     state_dict = load_checkpoint(checkpoint_path)
 
+
+    # doesn't work yet, but use this once it works.
+    #pipeline.load_lora_into_unet(state_dict, alpha, pipeline.unet)
+    #pipeline.load_lora_into_text_encoder(state_dict, alpha, pipeline.text_encoder)
+    #return
+
     matched_weights = {}
 
     for network_key, weight in state_dict.items():
@@ -455,7 +461,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
             continue
             
         key_network_without_network_parts, network_part = network_key.split(".", 1)
-        sd_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
+        sd_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False) # testing with a random lora on sd2 768 it does seem to work
 
         if sd_key not in matched_weights:
             # this seems wrong, the weight will only use the first sd_module it finds
