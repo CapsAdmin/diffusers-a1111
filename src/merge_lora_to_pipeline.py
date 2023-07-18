@@ -119,7 +119,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
         "lokr": ["lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2"],
         "ia3": ["weight", "on_input"],
         "hada": ["alpha", "hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2"],
-        "full": ["diff"]
+        "full": ["diff", "alpha", "lora_down.weight", "lora_up.weight"]
     }
 
     visited = []
