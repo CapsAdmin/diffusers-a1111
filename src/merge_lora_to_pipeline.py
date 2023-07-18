@@ -102,23 +102,35 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
 
     # load LoRA weight from .safetensors
     state_dict = load_file(checkpoint_path, device=device)
+    
+    net = Lora.network.Network("test")
+    net.te_multiplier = alpha
+    net.unet_multiplier = alpha
+    #net.dyn_dim = 2 # not sure what this is
+
+    matching_keys = {
+        "lora": ["lora_up.weight", "lora_down.weight", "lora_mid.weight"],
+        "lokr": ["lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2"],
+        "ia3": ["weight", "on_input"],
+        "hada": ["hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2"],
+        "full": ["diff"]
+    }
 
     visited = []
-
     # directly update weight in diffusers model
-    for key, weight in state_dict.items():
+    for network_key, weight in state_dict.items():
         # it is suggested to print out the key, it usually will be something like below
         # "lora_te_text_model_encoder_layers_0_self_attn_k_proj.lora_down.weight"
 
         # as we have set the alpha beforehand, so just skip
-        if ".alpha" in key or key in visited:
+        if ".alpha" in network_key or network_key in visited:
             continue
 
-        if "text" in key:
-            layer_infos = key.split(".")[0].split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split("_")
+        if "text" in network_key:
+            layer_infos = network_key.split(".")[0].split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split("_")
             curr_layer = pipeline.text_encoder
         else:
-            layer_infos = key.split(".")[0].split(LORA_PREFIX_UNET + "_")[-1].split("_")
+            layer_infos = network_key.split(".")[0].split(LORA_PREFIX_UNET + "_")[-1].split("_")
             curr_layer = pipeline.unet
 
         # find the target layer
@@ -136,64 +148,53 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                 else:
                     temp_name = layer_infos.pop(0)
 
-        pair_keys = []
-        UP = None
-        DOWN = None
-        
-        if "lora_down" in key or "lora_up" in key:
-            UP = "lora_up"
-            DOWN = "lora_down"
-        
-        if "lokr_w1" in key or "lokr_w2" in key:
-            UP = "lokr_w2"
-            DOWN = "lokr_w1"
+        matched_keys = []
+        for module_type, keys in matching_keys.items():
+            for a in keys:
+                if a in network_key:
+                    for b in keys:
+                        replaced_key = network_key.replace(a, b)
+                        if replaced_key in state_dict and not replaced_key in matched_keys:
+                            matched_keys.append(replaced_key)
 
-        if UP and DOWN:
-            if DOWN in key:
-                pair_keys.append(key.replace(DOWN, UP))
-                pair_keys.append(key)
-            else:
-                pair_keys.append(key)
-                pair_keys.append(key.replace(UP, DOWN))
+        key_network_without_network_parts, network_part = network_key.split(".", 1)   
 
-        key_network_without_network_parts, network_part = key.split(".", 1)
         compvis_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
-        net = Lora.network.Network("test")
-        net.te_multiplier = alpha
-        net.unet_multiplier = alpha
-        #net.dyn_dim = 2 not sure what this is
-        weights = Lora.network.NetworkWeights(network_key=key, sd_key=compvis_key, w={}, sd_module=curr_layer)
 
-        if UP and DOWN:
-            weights.w[network_part.replace(DOWN, UP)] = state_dict[pair_keys[0]]
-            weights.w[network_part] = state_dict[pair_keys[1]]
+        weights = Lora.network.NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
+
+        if matched_keys:
+            for item in matched_keys:
+                key_network_without_network_parts, network_part2 = item.split(".", 1)
+                weights.w[network_part2] = state_dict[item]
         else:
-            weights.w[network_part] = state_dict[key]
+            weights.w[network_part] = state_dict[network_key]
 
         updated = False
         for module_type in module_types:
             m = module_type.create_module(net, weights)
             if m is not None:
                 updated = True
-                curr_layer.weight.data += m.calc_updown(weight)
+                
+                try:
+                    updown = m.calc_updown(curr_layer.weight)
+                    curr_layer.weight.data += updown
+                    print("SUCCESS", network_part, curr_layer.weight.data.shape, weight.shape)
+                    for k, v in weights.w.items():
+                        print("\t", k, v.shape)
+                except Exception as e:
+                    print(e)
+                    print("FAIL", network_part, curr_layer.weight.data.shape, weight.shape)
+                    print("\t", network_key)
+                    print("\t", compvis_key)
+                    for k, v in weights.w.items():
+                        print("\t", k, v.shape)
 
         if not updated:
-            #print(network_part, network_part.replace(DOWN, UP))
-            print(f'{key} matched no layer')
+            print(f'{network_key} matched no layer')
+            pass
 
-        # update weight
-        """
-        if len(state_dict[pair_keys[0]].shape) == 4:
-            weight_up = state_dict[pair_keys[0]].squeeze(3).squeeze(2).to(dtype)
-            weight_down = state_dict[pair_keys[1]].squeeze(3).squeeze(2).to(dtype)
-            curr_layer.weight.data += alpha * torch.mm(weight_up, weight_down).unsqueeze(2).unsqueeze(3)
-        else:
-            weight_up = state_dict[pair_keys[0]].to(dtype)
-            weight_down = state_dict[pair_keys[1]].to(dtype)
-            curr_layer.weight.data += alpha * torch.mm(weight_up, weight_down)
-        """
-        # update visited list
-        for item in pair_keys:
+        for item in matched_keys:
             visited.append(item)
 
     return pipeline
