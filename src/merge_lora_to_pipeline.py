@@ -153,7 +153,6 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                     temp_name += "_" + layer_infos.pop(0)
                 else:
                     temp_name = layer_infos.pop(0)
-
         
         matched_keys = []
         for module_type, keys in matching_keys.items():
@@ -203,6 +202,3 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
 
         for item in matched_keys:
             visited.append(item)
-
-    return pipeline
-
