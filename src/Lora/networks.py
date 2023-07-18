@@ -309,7 +309,7 @@ def network_apply_weights(self: Union[torch.nn.Conv2d, torch.nn.Linear, torch.nn
                     if len(self.weight.shape) == 4 and self.weight.shape[1] == 9:
                         # inpainting model. zero pad updown to make channel[1]  4 to 9
                         updown = torch.nn.functional.pad(updown, (0, 0, 0, 0, 0, 5))
-        
+                    
                     self.weight += updown
                     continue
 

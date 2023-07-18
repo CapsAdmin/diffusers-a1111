@@ -17,7 +17,7 @@ for root, dirs, files in os.walk(WEBUI_MODELS + "Stable-diffusion"):
 loras = {}
 for root, dirs, files in os.walk(WEBUI_MODELS + "Lora"):
     for file in files:
-        if file.endswith(".safetensors"):
+        if file.endswith(".safetensors") or file.endswith(".pt"):
             filname_without_extension = os.path.splitext(file)[0]
             full_path = os.path.join(root, file)
             loras[filname_without_extension] = full_path

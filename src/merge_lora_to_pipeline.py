@@ -101,7 +101,12 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
     LORA_PREFIX_TEXT_ENCODER = "lora_te"
 
     # load LoRA weight from .safetensors
-    state_dict = load_file(checkpoint_path, device=device)
+
+    state_dict = None
+    if checkpoint_path.endswith(".safetensors"):
+       state_dict = load_file(checkpoint_path, device=device)
+    else:
+        state_dict = torch.load(checkpoint_path, map_location=device)
     
     net = Lora.network.Network("test")
     net.te_multiplier = alpha
@@ -112,7 +117,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
         "lora": ["lora_up.weight", "lora_down.weight", "lora_mid.weight"],
         "lokr": ["lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2"],
         "ia3": ["weight", "on_input"],
-        "hada": ["hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2"],
+        "hada": ["alpha", "hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2"],
         "full": ["diff"]
     }
 
@@ -123,7 +128,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
         # "lora_te_text_model_encoder_layers_0_self_attn_k_proj.lora_down.weight"
 
         # as we have set the alpha beforehand, so just skip
-        if ".alpha" in network_key or network_key in visited:
+        if network_key in visited:
             continue
 
         if "text" in network_key:
@@ -177,13 +182,13 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                 updated = True
                 
                 try:
-                    updown = m.calc_updown(curr_layer.weight)
+                    updown = m.calc_updown(curr_layer.weight.data)
                     curr_layer.weight.data += updown
-                    print("SUCCESS", network_part, curr_layer.weight.data.shape, weight.shape)
-                    for k, v in weights.w.items():
-                        print("\t", k, v.shape)
+                    print(compvis_key, weights.w.keys())
+                    #print("SUCCESS", network_part, curr_layer.weight.data.shape, weight.shape)
+                    #for k, v in weights.w.items():
+                        #print("\t", k, v.shape)
                 except Exception as e:
-                    print(e)
                     print("FAIL", network_part, curr_layer.weight.data.shape, weight.shape)
                     print("\t", network_key)
                     print("\t", compvis_key)
