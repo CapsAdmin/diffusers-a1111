@@ -18,7 +18,6 @@ class NetworkModuleIa3(Lora.network.NetworkModule):
     def calc_updown(self, orig_weight):
         w = self.w.to(orig_weight.device, dtype=orig_weight.dtype)
         
-        print(w.shape, orig_weight.shape)
         output_shape = [w.size(0), orig_weight.size(1)]
         if self.on_input:
             output_shape.reverse()
