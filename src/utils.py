@@ -2,7 +2,6 @@ import shared
 from compel import Compel
 import os
 import re
-import Lora.networks
 
 WEBUI_MODELS = os.getenv("WEBUI_MODELS")
 
@@ -47,10 +46,6 @@ def apply_tag_weight(pipe, tag_name, dict, input_str):
         matched = re.search(pattern, input_str)
         while matched:
             weight = float(matched.group(2))
-
-            #import Lora.networks
-            #Lora.networks.available_network_aliases = loras
-            #Lora.networks.load_networks(pipe, [key], [weight], [weight], [int(1)])
             
             from merge_lora_to_pipeline import merge_lora_to_pipeline
             merge_lora_to_pipeline(pipe, dict[key], weight, shared.device, shared.dtype)

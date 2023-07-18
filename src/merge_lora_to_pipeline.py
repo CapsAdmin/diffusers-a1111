@@ -113,6 +113,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
     net.unet_multiplier = alpha
     #net.dyn_dim = 2 # not sure what this is
 
+    # move these to networks?
     matching_keys = {
         "lora": ["lora_up.weight", "lora_down.weight", "lora_mid.weight"],
         "lokr": ["lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2"],
@@ -153,6 +154,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                 else:
                     temp_name = layer_infos.pop(0)
 
+        
         matched_keys = []
         for module_type, keys in matching_keys.items():
             for a in keys:
@@ -184,7 +186,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                 try:
                     updown = m.calc_updown(curr_layer.weight.data)
                     curr_layer.weight.data += updown
-                    print(compvis_key, weights.w.keys())
+                    #print(compvis_key, weights.w.keys())
                     #print("SUCCESS", network_part, curr_layer.weight.data.shape, weight.shape)
                     #for k, v in weights.w.items():
                         #print("\t", k, v.shape)
