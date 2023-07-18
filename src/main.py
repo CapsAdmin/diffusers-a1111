@@ -1,4 +1,18 @@
+import os
 from txt2img import txt2img
+
+if False:
+    image = txt2img(
+        checkpoint = "cinematicDiffusion_v1",
+        positive = """old man <lora:zundamonLoraForWD15_v1:1>""",
+        negative = """""",
+        steps = 10,
+        seed = 3125748766
+    )
+
+    image.save("../output/sd2.png")
+
+    os.exit()
 
 prompts = {
     "hada": """old man <lora:KyoAni:1.5>""", # DONE
@@ -6,9 +20,7 @@ prompts = {
     "lokr": """old man <lora:mikapikazo:1>""",  # DONE
     "full": """old man <lora:test_full:1>""", #DONE
     "lora": """old man <lora:animeScreencapStyle_v230epochs:1>""", # DONE
-
 }
-
 i = 0
 for type, prompt in prompts.items():    
     image = txt2img(

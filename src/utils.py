@@ -8,7 +8,7 @@ WEBUI_MODELS = os.getenv("WEBUI_MODELS")
 checkpoints = {}
 for root, dirs, files in os.walk(WEBUI_MODELS + "Stable-diffusion"):
     for file in files:
-        if file.endswith(".safetensors"):
+        if file.endswith(".safetensors") or file.endswith(".pt")  or file.endswith(".ckpt"):
             filname_without_extension = os.path.splitext(file)[0]
             full_path = os.path.join(root, file)
             checkpoints[filname_without_extension] = full_path
@@ -16,7 +16,7 @@ for root, dirs, files in os.walk(WEBUI_MODELS + "Stable-diffusion"):
 loras = {}
 for root, dirs, files in os.walk(WEBUI_MODELS + "Lora"):
     for file in files:
-        if file.endswith(".safetensors") or file.endswith(".pt"):
+        if file.endswith(".safetensors") or file.endswith(".pt")  or file.endswith(".ckpt"):
             filname_without_extension = os.path.splitext(file)[0]
             full_path = os.path.join(root, file)
             loras[filname_without_extension] = full_path
@@ -48,7 +48,7 @@ def apply_tag_weight(pipe, tag_name, dict, input_str):
             weight = float(matched.group(2))
             
             from merge_lora_to_pipeline import merge_lora_to_pipeline
-            merge_lora_to_pipeline(pipe, dict[key], weight, shared.device, shared.dtype)
+            merge_lora_to_pipeline(pipe, dict[key], weight)
             
             input_str = re.sub(pattern, "", input_str, count=1)
             matched = re.search(pattern, input_str)
@@ -75,7 +75,8 @@ def apply_prompts(pipe, positive: str, negative: str):
 def load_checkpoint(pipeline, name):
     pipe = pipeline.from_single_file(
         checkpoints[name], 
-        use_safetensors = True,
+        #use_safetensors = True,
+        local_files_only = True,
         torch_dtype=shared.dtype,
     )
     pipe.to(shared.device)

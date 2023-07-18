@@ -389,78 +389,69 @@ def convert_diffusers_name_to_compvis(key, is_sd2):
 
     return key
 
-def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
-    LORA_PREFIX_UNET = "lora_unet"
-    LORA_PREFIX_TEXT_ENCODER = "lora_te"
+remove_prefixes = [
+    "lora_unet_",
+    "lora_te_",
+]
 
-    # load LoRA weight from .safetensors
+def find_model_layer(network_key, text_encoder, unet):
+    for prefix in remove_prefixes:
+        if network_key.startswith(prefix):
+            network_key = network_key.removeprefix(prefix)
 
-    state_dict = None
-    if checkpoint_path.endswith(".safetensors"):
-       state_dict = load_file(checkpoint_path, device=device)
+    if "text" in network_key:
+        keys = network_key.split(".")[0].split("_")
+        layer = text_encoder
     else:
-        state_dict = torch.load(checkpoint_path, map_location=device)
+        keys = network_key.split(".")[0].split("_")
+        layer = unet
 
-    visited = []
-    matched_networks = {}
-    # directly update weight in diffusers model
-    for network_key, weight in state_dict.items():
-        # it is suggested to print out the key, it usually will be something like below
-        # "lora_te_text_model_encoder_layers_0_self_attn_k_proj.lora_down.weight"
-
-        # as we have set the alpha beforehand, so just skip
-        if network_key in visited:
-            continue
-
-        if "text" in network_key:
-            layer_infos = network_key.split(".")[0].split(LORA_PREFIX_TEXT_ENCODER + "_")[-1].split("_")
-            curr_layer = pipeline.text_encoder
-        else:
-            layer_infos = network_key.split(".")[0].split(LORA_PREFIX_UNET + "_")[-1].split("_")
-            curr_layer = pipeline.unet
-
-        # find the target layer
-        temp_name = layer_infos.pop(0)
-        while len(layer_infos) > -1:
+    # splitting by _ is wrong, since the layers can have names with underscores in them
+    # so we need to check if the layer exists, and if not, append the next key to the previous one
+    while len(keys) > 0:
+        key = keys.pop(0)
+        while True:
             try:
-                curr_layer = curr_layer.__getattr__(temp_name)
-                if len(layer_infos) > 0:
-                    temp_name = layer_infos.pop(0)
-                elif len(layer_infos) == 0:
-                    break
-            except Exception:
-                if len(temp_name) > 0:
-                    temp_name += "_" + layer_infos.pop(0)
-                else:
-                    temp_name = layer_infos.pop(0)
+                layer = layer.__getattr__(key)
+                break
+            except AttributeError:
+                key = key + "_" + keys.pop(0)
+
+    return layer
+
+def load_checkpoint(path):
+    if path.endswith(".safetensors"):
+       return load_file(path, device=shared.device)
+    else:
+        return torch.load(path, map_location=shared.device)
+
+def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
+    state_dict = load_checkpoint(checkpoint_path)
+
+    matched_networks = {}
+
+    for network_key, weight in state_dict.items():
+        sd_module = find_model_layer(network_key, pipeline.text_encoder, pipeline.unet)
             
         key_network_without_network_parts, network_part = network_key.split(".", 1)
-        compvis_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
+        sd_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
 
-        if compvis_key not in matched_networks:
-            matched_networks[compvis_key] = NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
+        if sd_key not in matched_networks:
+            matched_networks[sd_key] = NetworkWeights(network_key=network_key, sd_key=sd_key, w={}, sd_module=sd_module)
 
-        matched_networks[compvis_key].w[network_part] = weight
+        matched_networks[sd_key].w[network_part] = weight
 
-    for key, weights in matched_networks.items():
-        updated = False
+    for weights in matched_networks.values():
         for module in module_types:
             m = module.from_weights(weights)
             if m is not None:
                 m.te_multiplier = alpha
                 m.unet_multiplier = alpha
                 m.dyn_dim = None
-                updated = True
                 
-                try:
-                    weights.sd_module.weight.data += m.calc_updown(weights.sd_module.weight.data)
-                except Exception as e:
-                    print("FAIL", network_part, curr_layer.weight.data.shape, weight.shape)
-                    print("\t", network_key)
-                    print("\t", compvis_key)
-                    for k, v in weights.w.items():
-                        print("\t", k, v.shape)
+                # directly update weight in diffusers model
+                weights.sd_module.weight.data += m.calc_updown(weights.sd_module.weight.data)
 
-        if not updated:
-            print(f'{network_key} matched no layer')
-            pass
+                break
+        else:
+            print(f'{weights.network_key} matched no layer')
