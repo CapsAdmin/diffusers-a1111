@@ -401,16 +401,8 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
     else:
         state_dict = torch.load(checkpoint_path, map_location=device)
 
-    # move these to networks?
-    matching_keys = {
-        "lora": ["lora_up.weight", "lora_down.weight", "lora_mid.weight"],
-        "lokr": ["alpha", "lokr_w1", "lokr_w1_a", "lokr_w1_b", "lokr_w2", "lokr_w2_a", "lokr_w2_b", "lokr_t2"],
-        "ia3": ["weight", "on_input"],
-        "hada": ["alpha", "hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b", "hada_t1", "hada_t2"],
-        "full": ["diff", "alpha", "lora_down.weight", "lora_up.weight"]
-    }
-
     visited = []
+    matched_networks = {}
     # directly update weight in diffusers model
     for network_key, weight in state_dict.items():
         # it is suggested to print out the key, it usually will be something like below
@@ -441,29 +433,16 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                     temp_name += "_" + layer_infos.pop(0)
                 else:
                     temp_name = layer_infos.pop(0)
-        
-        matched_keys = []
-        for module_type, keys in matching_keys.items():
-            for a in keys:
-                if a in network_key:
-                    for b in keys:
-                        replaced_key = network_key.replace(a, b)
-                        if replaced_key in state_dict and not replaced_key in matched_keys:
-                            matched_keys.append(replaced_key)
-
-        key_network_without_network_parts, network_part = network_key.split(".", 1)   
-
+            
+        key_network_without_network_parts, network_part = network_key.split(".", 1)
         compvis_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
 
-        weights = NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
+        if compvis_key not in matched_networks:
+            matched_networks[compvis_key] = NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
 
-        if matched_keys:
-            for item in matched_keys:
-                key_network_without_network_parts, network_part2 = item.split(".", 1)
-                weights.w[network_part2] = state_dict[item]
-        else:
-            weights.w[network_part] = state_dict[network_key]
+        matched_networks[compvis_key].w[network_part] = weight
 
+    for key, weights in matched_networks.items():
         updated = False
         for module in module_types:
             m = module.from_weights(weights)
@@ -474,7 +453,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
                 updated = True
                 
                 try:
-                    curr_layer.weight.data += m.calc_updown(curr_layer.weight.data)
+                    weights.sd_module.weight.data += m.calc_updown(weights.sd_module.weight.data)
                 except Exception as e:
                     print("FAIL", network_part, curr_layer.weight.data.shape, weight.shape)
                     print("\t", network_key)
@@ -485,6 +464,3 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
         if not updated:
             print(f'{network_key} matched no layer')
             pass
-
-        for item in matched_keys:
-            visited.append(item)
