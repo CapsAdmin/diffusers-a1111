@@ -77,7 +77,7 @@ class NetworkModuleBase:
 
 class NetworkModuleLora(NetworkModuleBase):
     @staticmethod
-    def from_weights(weights: NetworkWeights):
+    def try_from_weights(weights: NetworkWeights):
         if all(x in weights.w for x in ["lora_up.weight", "lora_down.weight"]):
             return NetworkModuleLora(weights)
 
@@ -161,7 +161,7 @@ def make_kron(orig_shape, w1, w2):
 
 class NetworkModuleLokr(NetworkModuleBase):
     @staticmethod
-    def from_weights(weights: NetworkWeights):
+    def try_from_weights(weights: NetworkWeights):
         has_1 = "lokr_w1" in weights.w or ("lokr_w1_a" in weights.w and "lokr_w1_b" in weights.w)
         has_2 = "lokr_w2" in weights.w or ("lokr_w2_a" in weights.w and "lokr_w2_b" in weights.w)
         if has_1 and has_2:
@@ -211,7 +211,7 @@ class NetworkModuleLokr(NetworkModuleBase):
         return self.finalize_updown(updown, orig_weight, output_shape)
 class NetworkModuleIa3(NetworkModuleBase):
     @staticmethod 
-    def from_weights(weights: NetworkWeights):
+    def try_from_weights(weights: NetworkWeights):
         if all(x in weights.w for x in ["weight"]):
             return NetworkModuleIa3(weights)
 
@@ -236,7 +236,7 @@ class NetworkModuleIa3(NetworkModuleBase):
 
 class NetworkModuleHada(NetworkModuleBase):
     @staticmethod
-    def from_weights(weights: NetworkWeights):
+    def try_from_weights(weights: NetworkWeights):
         if all(x in weights.w for x in ["hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b"]):
             return NetworkModuleHada(weights)
 
@@ -286,7 +286,7 @@ class NetworkModuleHada(NetworkModuleBase):
         return self.finalize_updown(updown, orig_weight, output_shape)
 class NetworkModuleFull(NetworkModuleBase):
     @staticmethod
-    def from_weights(weights: NetworkWeights):
+    def try_from_weights(weights: NetworkWeights):
         if all(x in weights.w for x in ["diff"]):
             return NetworkModuleFull(weights)
 
@@ -415,8 +415,8 @@ def find_model_layer(network_key, text_encoder, unet):
         layer = unet
         which = "unet"
 
-    # splitting by _ is wrong, since the layers can have names with underscores in them
-    # so we need to check if the layer exists, and if not, append the next key to the previous one
+    # splitting by _ is wrong, since the layers can be nested with underscores in the keys
+    # so we need to check if the layer exists, and if not, append the next key to the previous one until it matches
     index_so_far = ""
     while len(keys) > 0:
         key = keys.pop(0)
@@ -447,7 +447,7 @@ def load_checkpoint(path):
 def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
     state_dict = load_checkpoint(checkpoint_path)
 
-    matched_networks = {}
+    matched_weights = {}
 
     for network_key, weight in state_dict.items():
         sd_module = find_model_layer(network_key, pipeline.text_encoder, pipeline.unet)
@@ -457,14 +457,15 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
         key_network_without_network_parts, network_part = network_key.split(".", 1)
         sd_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
 
-        if sd_key not in matched_networks:
-            matched_networks[sd_key] = NetworkWeights(network_key=network_key, sd_key=sd_key, w={}, sd_module=sd_module)
+        if sd_key not in matched_weights:
+            # this seems wrong, the weight will only use the first sd_module it finds
+            matched_weights[sd_key] = NetworkWeights(network_key=network_key, sd_key=sd_key, w={}, sd_module=sd_module)
 
-        matched_networks[sd_key].w[network_part] = weight
+        matched_weights[sd_key].w[network_part] = weight
 
-    for weights in matched_networks.values():
+    for weights in matched_weights.values():
         for module in module_types:
-            m = module.from_weights(weights)
+            m = module.try_from_weights(weights)
             if m is not None:
                 m.te_multiplier = alpha
                 m.unet_multiplier = alpha
