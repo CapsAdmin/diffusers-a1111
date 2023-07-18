@@ -1,18 +1,15 @@
 import Lora.lyco_helpers
-import Lora.network
-
-
-class ModuleTypeHada(Lora.network.ModuleType):
-    def create_module(self, net: Lora.network.Network, weights: Lora.network.NetworkWeights):
+import Lora.network_base
+class NetworkModuleHada(Lora.network_base.NetworkModuleBase):
+    @staticmethod
+    def from_weights(weights: Lora.network_base.NetworkWeights):
         if all(x in weights.w for x in ["hada_w1_a", "hada_w1_b", "hada_w2_a", "hada_w2_b"]):
-            return NetworkModuleHada(net, weights)
+            return NetworkModuleHada(weights)
 
         return None
 
-
-class NetworkModuleHada(Lora.network.NetworkModule):
-    def __init__(self,  net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        super().__init__(net, weights)
+    def __init__(self, weights: Lora.network_base.NetworkWeights):
+        super().__init__(weights)
 
         if hasattr(self.sd_module, 'weight'):
             self.shape = self.sd_module.weight.shape

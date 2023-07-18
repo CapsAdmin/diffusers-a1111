@@ -1,19 +1,18 @@
 import torch
 
 import Lora.lyco_helpers
-import Lora.network
+import Lora.network_base
 import shared
-class ModuleTypeLora(Lora.network.ModuleType):
-    def create_module(self, net: Lora.network.Network, weights: Lora.network.NetworkWeights):
+class NetworkModuleLora(Lora.network_base.NetworkModuleBase):
+    @staticmethod
+    def from_weights(weights: Lora.network_base.NetworkWeights):
         if all(x in weights.w for x in ["lora_up.weight", "lora_down.weight"]):
-            return NetworkModuleLora(net, weights)
+            return NetworkModuleLora(weights)
 
         return None
 
-
-class NetworkModuleLora(Lora.network.NetworkModule):
-    def __init__(self,  net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        super().__init__(net, weights)
+    def __init__(self, weights: Lora.network_base.NetworkWeights):
+        super().__init__(weights)
 
         self.up_model = self.create_module(weights.w, "lora_up.weight")
         self.down_model = self.create_module(weights.w, "lora_down.weight")
@@ -71,7 +70,7 @@ class NetworkModuleLora(Lora.network.NetworkModule):
         else:
             if len(down.shape) == 4:
                 output_shape += down.shape[2:]
-            updown = Lora.lyco_helpers.rebuild_conventional(up, down, output_shape, self.network.dyn_dim)
+            updown = Lora.lyco_helpers.rebuild_conventional(up, down, output_shape, self.dyn_dim)
 
         return self.finalize_updown(updown, orig_weight, output_shape)
 

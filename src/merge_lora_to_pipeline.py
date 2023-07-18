@@ -6,14 +6,14 @@ import Lora.network_hada
 import Lora.network_ia3
 import Lora.network_lokr
 import Lora.network_full
-import Lora.network
+import Lora.network_base
 
 module_types = [
-    Lora.network_lora.ModuleTypeLora(),
-    Lora.network_hada.ModuleTypeHada(),
-    Lora.network_ia3.ModuleTypeIa3(),
-    Lora.network_lokr.ModuleTypeLokr(),
-    Lora.network_full.ModuleTypeFull(),
+    Lora.network_lora.NetworkModuleLora,
+    Lora.network_hada.NetworkModuleHada,
+    Lora.network_ia3.NetworkModuleIa3,
+    Lora.network_lokr.NetworkModuleLokr,
+    Lora.network_full.NetworkModuleFull,
 ]
 
 re_digits = re.compile(r"\d+")
@@ -29,7 +29,6 @@ suffix_conversion = {
         "conv_shortcut": "skip_connection",
     }
 }
-
 
 def convert_diffusers_name_to_compvis(key, is_sd2):
     def match(match_list, regex_text):
@@ -107,11 +106,6 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
        state_dict = load_file(checkpoint_path, device=device)
     else:
         state_dict = torch.load(checkpoint_path, map_location=device)
-    
-    net = Lora.network.Network("test")
-    net.te_multiplier = alpha
-    net.unet_multiplier = alpha
-    #net.dyn_dim = 2 # not sure what this is
 
     # move these to networks?
     matching_keys = {
@@ -167,7 +161,7 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
 
         compvis_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
 
-        weights = Lora.network.NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
+        weights = Lora.network_base.NetworkWeights(network_key=network_key, sd_key=compvis_key, w={}, sd_module=curr_layer)
 
         if matched_keys:
             for item in matched_keys:
@@ -177,18 +171,16 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha, device, dtype):
             weights.w[network_part] = state_dict[network_key]
 
         updated = False
-        for module_type in module_types:
-            m = module_type.create_module(net, weights)
+        for module in module_types:
+            m = module.from_weights(weights)
             if m is not None:
+                m.te_multiplier = alpha
+                m.unet_multiplier = alpha
+                m.dyn_dim = None
                 updated = True
                 
                 try:
-                    updown = m.calc_updown(curr_layer.weight.data)
-                    curr_layer.weight.data += updown
-                    #print(compvis_key, weights.w.keys())
-                    #print("SUCCESS", network_part, curr_layer.weight.data.shape, weight.shape)
-                    #for k, v in weights.w.items():
-                        #print("\t", k, v.shape)
+                    curr_layer.weight.data += m.calc_updown(curr_layer.weight.data)
                 except Exception as e:
                     print("FAIL", network_part, curr_layer.weight.data.shape, weight.shape)
                     print("\t", network_key)

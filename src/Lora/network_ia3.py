@@ -1,17 +1,13 @@
-import Lora.network
-
-class ModuleTypeIa3(Lora.network.ModuleType):
-    def create_module(self, net: Lora.network.Network, weights: Lora.network.NetworkWeights):
+import Lora.network_base
+class NetworkModuleIa3(Lora.network_base.NetworkModuleBase):
+    @staticmethod 
+    def from_weights(weights: Lora.network_base.NetworkWeights):
         if all(x in weights.w for x in ["weight"]):
-            return NetworkModuleIa3(net, weights)
+            return NetworkModuleIa3(weights)
 
         return None
-
-
-class NetworkModuleIa3(Lora.network.NetworkModule):
-    def __init__(self,  net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        super().__init__(net, weights)
-
+    def __init__(self, weights: Lora.network_base.NetworkWeights):
+        super().__init__(weights)
         self.w = weights.w["weight"]
         self.on_input = weights.w["on_input"].item()
 

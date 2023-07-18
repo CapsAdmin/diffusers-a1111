@@ -3,29 +3,12 @@ from collections import namedtuple
 
 NetworkWeights = namedtuple('NetworkWeights', ['network_key', 'sd_key', 'w', 'sd_module'])
 
-metadata_tags_order = {"ss_sd_model_name": 1, "ss_resolution": 2, "ss_clip_skip": 3, "ss_num_train_images": 10, "ss_tag_frequency": 20}
+class NetworkModuleBase:
+    dyn_dim = None
+    unet_multiplier = 1.0
+    te_multiplier = 1.0
 
-class Network:  # LoraModule
-    def __init__(self, name):
-        self.name = name
-        self.te_multiplier = 1.0
-        self.unet_multiplier = 1.0
-        self.dyn_dim = None
-        self.modules = {}
-        self.mtime = None
-
-        self.mentioned_name = None
-        """the text that was used to add the network to prompt - can be either name or an alias"""
-
-
-class ModuleType:
-    def create_module(self, net: Network, weights: NetworkWeights) -> Network | None:
-        return None
-
-
-class NetworkModule:
-    def __init__(self, net: Network, weights: NetworkWeights):
-        self.network = net
+    def __init__(self, weights: NetworkWeights):
         self.network_key = weights.network_key
         self.sd_key = weights.sd_key
         self.sd_module = weights.sd_module
@@ -40,9 +23,9 @@ class NetworkModule:
 
     def multiplier(self):
         if 'transformer' in self.sd_key[:20]:
-            return self.network.te_multiplier
+            return self.te_multiplier
         else:
-            return self.network.unet_multiplier
+            return self.unet_multiplier
 
     def calc_scale(self):
         if self.scale is not None:

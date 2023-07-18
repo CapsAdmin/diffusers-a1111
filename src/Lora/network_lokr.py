@@ -1,17 +1,7 @@
 import torch
 
 import Lora.lyco_helpers
-import Lora.network
-
-class ModuleTypeLokr(Lora.network.ModuleType):
-    def create_module(self, net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        has_1 = "lokr_w1" in weights.w or ("lokr_w1_a" in weights.w and "lokr_w1_b" in weights.w)
-        has_2 = "lokr_w2" in weights.w or ("lokr_w2_a" in weights.w and "lokr_w2_b" in weights.w)
-        if has_1 and has_2:
-            return NetworkModuleLokr(net, weights)
-
-        return None
-
+import Lora.network_base
 
 def make_kron(orig_shape, w1, w2):
     if len(w2.shape) == 4:
@@ -19,10 +9,18 @@ def make_kron(orig_shape, w1, w2):
     w2 = w2.contiguous()
     return torch.kron(w1, w2).reshape(orig_shape)
 
+class NetworkModuleLokr(Lora.network_base.NetworkModuleBase):
+    @staticmethod
+    def from_weights(weights: Lora.network_base.NetworkWeights):
+        has_1 = "lokr_w1" in weights.w or ("lokr_w1_a" in weights.w and "lokr_w1_b" in weights.w)
+        has_2 = "lokr_w2" in weights.w or ("lokr_w2_a" in weights.w and "lokr_w2_b" in weights.w)
+        if has_1 and has_2:
+            return NetworkModuleLokr(weights)
 
-class NetworkModuleLokr(Lora.network.NetworkModule):
-    def __init__(self,  net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        super().__init__(net, weights)
+        return None
+
+    def __init__(self, weights: Lora.network_base.NetworkWeights):
+        super().__init__(weights)
 
         self.w1 = weights.w.get("lokr_w1")
         self.w1a = weights.w.get("lokr_w1_a")

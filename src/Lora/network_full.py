@@ -1,17 +1,14 @@
-import Lora.network
-
-class ModuleTypeFull(Lora.network.ModuleType):
-    def create_module(self, net: Lora.network.Network, weights: Lora.network.NetworkWeights):
+import Lora.network_base
+class NetworkModuleFull(Lora.network_base.NetworkModuleBase):
+    @staticmethod
+    def from_weights(weights: Lora.network_base.NetworkWeights):
         if all(x in weights.w for x in ["diff"]):
-            return NetworkModuleFull(net, weights)
+            return NetworkModuleFull(weights)
 
         return None
 
-
-class NetworkModuleFull(Lora.network.NetworkModule):
-    def __init__(self,  net: Lora.network.Network, weights: Lora.network.NetworkWeights):
-        super().__init__(net, weights)
-
+    def __init__(self, weights: Lora.network_base.NetworkWeights):
+        super().__init__(weights)
         self.weight = weights.w.get("diff")
 
     def calc_updown(self, orig_weight):
