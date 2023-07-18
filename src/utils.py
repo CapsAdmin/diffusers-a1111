@@ -42,22 +42,19 @@ def apply_embeddings(pipe, input_str):
     return input_str
 
 def apply_tag_weight(pipe, tag_name, dict, input_str):
-    from load_lora import convert
     for key in dict.keys():
         pattern = "<"+tag_name+":(" + re.escape(key) + "):([0-9.]+)>"
         matched = re.search(pattern, input_str)
         while matched:
             weight = float(matched.group(2))
 
-            #print(pipe.text_encoder)
-            #print(pipe.unet)
-
-
-            import Lora.networks
-            Lora.networks.available_network_aliases = loras
-            Lora.networks.load_networks(pipe, [key], [weight], [weight], [int(1)])
-
-            #convert(pipe, dict[key], weight, shared.device, shared.dtype)
+            #import Lora.networks
+            #Lora.networks.available_network_aliases = loras
+            #Lora.networks.load_networks(pipe, [key], [weight], [weight], [int(1)])
+            
+            from merge_lora_to_pipeline import merge_lora_to_pipeline
+            merge_lora_to_pipeline(pipe, dict[key], weight, shared.device, shared.dtype)
+            
             input_str = re.sub(pattern, "", input_str, count=1)
             matched = re.search(pattern, input_str)
     return input_str
