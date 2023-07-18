@@ -394,6 +394,13 @@ remove_prefixes = [
     "lora_te_",
 ]
 
+def has_len(obj):
+    try:
+        len(obj)
+        return True
+    except:
+        return False
+
 def find_model_layer(network_key, text_encoder, unet):
     for prefix in remove_prefixes:
         if network_key.startswith(prefix):
@@ -402,20 +409,32 @@ def find_model_layer(network_key, text_encoder, unet):
     if "text" in network_key:
         keys = network_key.split(".")[0].split("_")
         layer = text_encoder
+        which = "text_encoder"
     else:
         keys = network_key.split(".")[0].split("_")
         layer = unet
+        which = "unet"
 
     # splitting by _ is wrong, since the layers can have names with underscores in them
     # so we need to check if the layer exists, and if not, append the next key to the previous one
+    index_so_far = ""
     while len(keys) > 0:
         key = keys.pop(0)
         while True:
             try:
                 layer = layer.__getattr__(key)
+                index_so_far += key + "."
                 break
             except AttributeError:
-                key = key + "_" + keys.pop(0)
+                if has_len(layer):
+                    print(f'Cannot index {type(layer).__name__}[{len(layer)}] {which}.{index_so_far}>>{key}<<: out of range')
+                    return None
+                else:
+                    if len(keys) == 0:
+                        print(f'Cannot index {which}.{index_so_far}>>{key}<<')
+                        return None
+                    
+                    key = key + "_" + keys.pop(0)
 
     return layer
 
@@ -432,6 +451,8 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
 
     for network_key, weight in state_dict.items():
         sd_module = find_model_layer(network_key, pipeline.text_encoder, pipeline.unet)
+        if sd_module is None:
+            continue
             
         key_network_without_network_parts, network_part = network_key.split(".", 1)
         sd_key = convert_diffusers_name_to_compvis(key_network_without_network_parts, False)
@@ -450,7 +471,10 @@ def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
                 m.dyn_dim = None
                 
                 # directly update weight in diffusers model
-                weights.sd_module.weight.data += m.calc_updown(weights.sd_module.weight.data)
+                try:
+                    weights.sd_module.weight.data += m.calc_updown(weights.sd_module.weight.data)
+                except Exception as e:
+                    print(f'Failed to update weight for {weights.network_key}: {e}')
 
                 break
         else:
