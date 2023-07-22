@@ -1,5 +1,4 @@
 import torch
-from safetensors.torch import load_file
 from collections import namedtuple
 import re
 import shared
@@ -438,25 +437,11 @@ def find_model_layer(network_key, text_encoder, unet):
 
     return layer
 
-def load_checkpoint(path):
-    if path.endswith(".safetensors"):
-       return load_file(path, device=shared.device)
-    else:
-        return torch.load(path, map_location=shared.device)
-
-def merge_lora_to_pipeline(pipeline, checkpoint_path, alpha):
-    state_dict = load_checkpoint(checkpoint_path)
-
-
-    # doesn't work yet, but use this once it works.
-    #pipeline.load_lora_into_unet(state_dict, alpha, pipeline.unet)
-    #pipeline.load_lora_into_text_encoder(state_dict, alpha, pipeline.text_encoder)
-    #return
-
+def merge_lora_to_pipeline(text_encoder, unet, lora_state_dict, alpha):
     matched_weights = {}
 
-    for network_key, weight in state_dict.items():
-        sd_module = find_model_layer(network_key, pipeline.text_encoder, pipeline.unet)
+    for network_key, weight in lora_state_dict.items():
+        sd_module = find_model_layer(network_key, text_encoder, unet)
         if sd_module is None:
             continue
             
