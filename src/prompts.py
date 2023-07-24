@@ -35,7 +35,7 @@ def apply_hypernetwork(pipe, path, weight):
     from merge_hypernetwork_to_pipeline import merge_hypernetwork_to_pipeline
     merge_hypernetwork_to_pipeline(pipe.text_encoder, pipe.unet, util.load_state_dict(path), weight)
 
-def apply_prompts(pipe, positive: str, negative: str):
+def create_a1111_conditioning(pipe, positive: str, negative: str, clip_skip = 1):
 
     positive = apply_embeddings(pipe, positive)
     negative = apply_embeddings(pipe, negative)
@@ -49,6 +49,9 @@ def apply_prompts(pipe, positive: str, negative: str):
     positive = apply_tag_weight(pipe, "hypernetwork", resources.hypernetworks, positive, apply_hypernetwork)
     negative = apply_tag_weight(pipe, "hypernetwork", resources.hypernetworks, negative, apply_hypernetwork)
 
-    positive_cond, negative_cond = conditioning.text_embeddings(pipe, positive, negative)
+    positive_cond, negative_cond = conditioning.text_embeddings(pipe, positive, negative, clip_skip)
     
-    return [positive_cond, negative_cond]
+    return {
+        'prompt_embeds': positive_cond,
+        'negative_prompt_embeds': negative_cond,
+    }
