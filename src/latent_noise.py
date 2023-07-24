@@ -19,15 +19,21 @@ def slerp(val, low, high):
     res = (torch.sin((1.0-val)*omega)/so).unsqueeze(1)*low + (torch.sin(val*omega)/so).unsqueeze(1) * high
     return res
 
-def randn(shape, seed):
+def randn(shape, seed, source):
     torch.manual_seed(seed)
-    return torch.randn(shape, device=shared.device, dtype=shared.dtype)
+    if source == "gpu":
+        tensor = torch.randn(shape, device=shared.gpu, dtype=shared.dtype)
+
+    if source == "cpu":
+        tensor = torch.randn(shape, device=shared.gpu, dtype=shared.dtype)
+    
+    return tensor.to(shared.device)
 
 def get_noise_shape(width, height, seed_resize_from_h=0, seed_resize_from_w=0):
     shape = (opt_C, height // opt_f, width // opt_f)
     return shape if seed_resize_from_h <= 0 or seed_resize_from_w <= 0 else (shape[0], seed_resize_from_h//opt_f, seed_resize_from_w//opt_f)  
 
-def create_random_tensors(shape, seeds, seed_delta, subseeds=None, subseed_strength=0.0, seed_resize_from_h=0, seed_resize_from_w=0):
+def create_random_tensors(shape, seeds, seed_delta, subseeds=None, subseed_strength=0.0, seed_resize_from_h=0, seed_resize_from_w=0, randn_source="gpu"):
     xs = []
 
     do_subseed = subseeds is not None and subseed_strength != 0.0
@@ -37,19 +43,19 @@ def create_random_tensors(shape, seeds, seed_delta, subseeds=None, subseed_stren
                 
         if do_subseed:
             subseed = 0 if i >= len(subseeds) else subseeds[i]
-            subnoise = randn(noise_shape, subseed)
+            subnoise = randn(noise_shape, subseed, randn_source)
 
         # randn results depend on device; gpu and cpu get different results for same seed;
         # the way I see it, it's better to do this on CPU, so that everyone gets same result;
         # but the original script had it like this, so I do not dare change it for now because
         # it will break everyone's seeds.
-        noise = randn(noise_shape, seed)
+        noise = randn(noise_shape, seed, randn_source)
 
         if do_subseed:
             noise = slerp(subseed_strength, noise, subnoise)
 
         if noise_shape != shape:
-            x = randn(seed, shape)
+            x = randn(seed, shape, randn_source)
             dx = (shape[2] - noise_shape[2]) // 2
             dy = (shape[1] - noise_shape[1]) // 2
             w = noise_shape[2] if dx >= 0 else noise_shape[2] + 2 * dx
@@ -69,14 +75,15 @@ def create_random_tensors(shape, seeds, seed_delta, subseeds=None, subseed_stren
 
     return torch.stack(xs)
 
-def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=31337, batch_size=1, sub_seed=0, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0):
+def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=31337, batch_size=1, sub_seed=0, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, randn_source="gpu"):
     return create_random_tensors(
         (opt_C, height // opt_f, width // opt_f), 
         [seed + i for i in range(batch_size)], eta_noise_seed_delta, 
         subseeds=[sub_seed + i for i in range(batch_size)], 
         subseed_strength=subseed_strength, 
         seed_resize_from_h=seed_resize_from_h, 
-        seed_resize_from_w=seed_resize_from_w
+        seed_resize_from_w=seed_resize_from_w,
+        randn_source=randn_source
     )
 
 
@@ -84,8 +91,8 @@ def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=31337, b
 # in a1111 this was done with create_random_tensors but in diffusers 
 # this is done internally using a generator. 
 # so with euler this doesn't look exactly the same but it's close enough
-def create_a1111_sampler_generator(seed, eta_noise_seed_delta=31337):
-    return torch.Generator(device=shared.device).manual_seed(seed + eta_noise_seed_delta)
+def create_a1111_sampler_generator(seed, eta_noise_seed_delta=31337, randn_source="gpu"):
+    return torch.Generator(device=shared.gpu if randn_source == "gpu" else shared.cpu).manual_seed(seed + eta_noise_seed_delta)
 
 
     

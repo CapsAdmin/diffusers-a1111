@@ -130,6 +130,7 @@ def kdiffusion_sampler(
     height, 
     seed_resize_from_h, 
     seed_resize_from_w,
+    randn_source = "gpu",
 
     enable_quantization = True,
     use_old_karras_scheduler_sigmas = False,
@@ -139,7 +140,11 @@ def kdiffusion_sampler(
     rho = 1.0,
     sigma_min = 0,
     sigma_max = 0,
-    eta = 0.75
+    eta_ancestral = 1,
+    s_churn = 0.0,
+    s_tmin = 0.0,
+    s_tmax = 0.0,
+    s_noise = 1.0,
 ):
     sampler_info = next((sampler for sampler in samplers_k_diffusion if sampler[0] == sampler_name), None)
     if sampler_info is None:
@@ -194,7 +199,13 @@ def kdiffusion_sampler(
             #current_iter_seeds = p.all_seeds[p.iteration * p.batch_size:(p.iteration + 1) * p.batch_size]
             return k_diffusion.sampling.BrownianTreeNoiseSampler(latents, sigma_min, sigma_max, seed=[seed])
 
-        return lambda sigma, sigma_next: torch.randn(noise_shape, layout=latents.layout, device=shared.device, dtype=shared.dtype, generator=gen)
+        return lambda sigma, sigma_next: torch.randn(
+            noise_shape, 
+            layout=latents.layout, 
+            device=shared.gpu if randn_source == "gpu" else shared.cpu, 
+            dtype=shared.dtype, 
+            generator=gen
+        ).to(shared.device)
     
     # this depends on kdiffusion not changing arguments around too much
     sampler_args = {
@@ -205,9 +216,13 @@ def kdiffusion_sampler(
         "rho": rho,
         "sigma_min": denoiser.sigmas[0].item(),
         "sigma_max": denoiser.sigmas[-1].item(),
-        "eta": eta,
+        "eta": eta_ancestral,
         "noise_sampler": create_noise_sampler(),
         "n": num_inference_steps,
+        "s_churn": s_churn,
+        "s_tmin": s_tmin,
+        "s_tmax": s_tmax,
+        "s_noise": s_noise,
     }
 
     import inspect
@@ -241,6 +256,7 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
     rho = 1.0,
     sigma_min = 0,
     sigma_max = 0,
+    randn_source = "gpu",
 
     prompt: Union[str, List[str]] = None,
     height: Optional[int] = None,
@@ -249,7 +265,7 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
     guidance_scale: float = 7.5,
     negative_prompt: Optional[Union[str, List[str]]] = None,
     num_images_per_prompt: Optional[int] = 1,
-    eta: float = 0.75,
+    eta_ancestral: float = 0.75,
     generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
     latents: Optional[torch.FloatTensor] = None,
     prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -323,29 +339,29 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
 
     import kdiffusion
     latents = kdiffusion.kdiffusion_sampler(
-        self,
-        latents,
-        num_inference_steps, 
-        guidance_scale, 
-        prompt_embeds, 
-        callback, 
-        callback_steps, 
-        seed, 
-        eta_noise_seed_delta, 
-        width, 
-        height, 
-        seed_resize_from_h, 
-        seed_resize_from_w,
-        enable_quantization,
-
-        use_old_karras_scheduler_sigmas,
-        always_discard_next_to_last_sigma,
-        sampler_name,
-        k_sched_type,
-        rho,
-        sigma_min,
-        sigma_max,
-        eta,
+        self = self,
+        latents = latents,
+        num_inference_steps = num_inference_steps, 
+        guidance_scale = guidance_scale, 
+        prompt_embeds = prompt_embeds, 
+        callback = callback, 
+        callback_steps = callback_steps, 
+        seed = seed, 
+        eta_noise_seed_delta = eta_noise_seed_delta, 
+        width = width, 
+        height = height, 
+        seed_resize_from_h = seed_resize_from_h, 
+        seed_resize_from_w = seed_resize_from_w,
+        enable_quantization = enable_quantization,
+        use_old_karras_scheduler_sigmas = use_old_karras_scheduler_sigmas,
+        always_discard_next_to_last_sigma = always_discard_next_to_last_sigma,
+        sampler_name = sampler_name,
+        k_sched_type = k_sched_type,
+        rho = rho,
+        sigma_min = sigma_min,
+        sigma_max = sigma_max,
+        eta_ancestral = eta_ancestral,
+        randn_source = randn_source,
     )
 
     if not output_type == "latent":
