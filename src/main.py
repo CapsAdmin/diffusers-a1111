@@ -1,11 +1,9 @@
-import hacks
-import os
 from txt2img import txt2img
 
 image = txt2img(
     checkpoint = "juggernaut_final",
     
-    positive = """old man""",
+    positive = """""",
     negative = """""",
     
     steps = 20,
@@ -16,7 +14,7 @@ image = txt2img(
     
     batch_size = 1, # doesn't work yet
     cfg_scale = 7.5,
-    
+
     subseed_strength = 0,
     sub_seed = 1,
     seed_resize_from_h = 0,

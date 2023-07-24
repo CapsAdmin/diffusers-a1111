@@ -2,6 +2,3 @@
 .diffusers
 __pycache__
 output
-src/diffusers
-src/annotator
-src/k_diffusion

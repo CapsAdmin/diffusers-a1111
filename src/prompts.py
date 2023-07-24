@@ -1,4 +1,3 @@
-from compel import Compel
 import re
 import resources
 import conditioning

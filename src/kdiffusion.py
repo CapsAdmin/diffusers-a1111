@@ -2,8 +2,7 @@ import torch
 import shared
 import latent_noise
 
-# assumes k-diffusion is cloned into src as k_diffusion for now
-from k_diffusion import k_diffusion
+import k_diffusion
 sampling = k_diffusion.sampling
 
 samplers_k_diffusion = [
