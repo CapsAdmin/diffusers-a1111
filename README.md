@@ -25,6 +25,7 @@ This implements a lot of the txt2img features from a1111 with diffusers. The goa
 - img2img and inpaint
 - controlnet extension (some work)
 - AND, and other prompt features
+- batch size and seed logic
 
 ```python
 from txt2img import txt2img
@@ -41,7 +42,6 @@ image = txt2img(
     width = 512,
     height = 512,
 
-    batch_size = 1, # doesn't work yet
     cfg_scale = 7.5,
 
     subseed_strength = 0,
