@@ -51,11 +51,9 @@ def create_denoiser(self, device, enable_quantization = True):
     model = ModelWrapper(self.unet, self.scheduler.alphas_cumprod)
 
     if self.scheduler.config.prediction_type == "v_prediction":
-        from k_diffusion.k_diffusion.external import CompVisVDenoiser
-        denoiser = CompVisVDenoiser(model, quantize=enable_quantization)
+        denoiser = k_diffusion.external.CompVisVDenoiser(model, quantize=enable_quantization)
     else:
-        from k_diffusion.k_diffusion.external import CompVisDenoiser
-        denoiser = CompVisDenoiser(model, quantize=enable_quantization)
+        denoiser = k_diffusion.external.CompVisDenoiser(model, quantize=enable_quantization)
     
     denoiser.sigmas = denoiser.sigmas.to(device)
     denoiser.log_sigmas = denoiser.log_sigmas.to(device)
@@ -257,6 +255,11 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
     sigma_max = 0,
     randn_source = "gpu",
 
+    s_churn = 0.0,
+    s_tmin = 0.0,
+    s_tmax = 0.0,
+    s_noise = 1.0,
+
     prompt: Union[str, List[str]] = None,
     height: Optional[int] = None,
     width: Optional[int] = None,
@@ -336,8 +339,7 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
 
     # 7. Denoising loop
 
-    import kdiffusion
-    latents = kdiffusion.kdiffusion_sampler(
+    latents = kdiffusion_sampler(
         self = self,
         latents = latents,
         num_inference_steps = num_inference_steps, 
@@ -361,6 +363,10 @@ def StableDiffusionPipeline__call__WithCustomDenoising(
         sigma_max = sigma_max,
         eta_ancestral = eta_ancestral,
         randn_source = randn_source,
+        s_churn = s_churn,
+        s_tmin = s_tmin,
+        s_tmax = s_tmax,
+        s_noise = s_noise,
     )
 
     if not output_type == "latent":
