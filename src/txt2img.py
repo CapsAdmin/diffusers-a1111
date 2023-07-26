@@ -1,39 +1,80 @@
-from diffusers import StableDiffusionControlNetPipeline, StableDiffusionPipeline, DPMSolverMultistepScheduler, ControlNetModel
-from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
+from diffusers import StableDiffusionPipeline, PNDMScheduler, UniPCMultistepScheduler, DDIMScheduler, EulerAncestralDiscreteScheduler, EulerDiscreteScheduler, HeunDiscreteScheduler, LMSDiscreteScheduler
 import kdiffusion
 import prompts
 import shared
 import resources
 from PIL import Image
 import latent_noise
+from stable_diffusion_pipeline_custom_call import StableDiffusionPipeline__call__WithCustomDenoising
 
 def txt2img(
     checkpoint = "juggernaut_final", 
-    positive = "", 
-    negative = "", 
-    steps = 20, 
-    seed = 0,
     width = 512,
     height = 512,
-    
     batch_size = 1,
-    cfg_scale = 7,
-    subseed_strength = 0,
-    sub_seed = 1,
-    seed_resize_from_h = 0,
-    seed_resize_from_w = 0,
 
-    # Clip skip (ignore last layers of CLIP network; 1 ignores none, 2 ignores one layer) https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip
-    CLIP_stop_at_last_layers = 1,
-    
+    ## Conditioning
+        positive = "", 
+        negative = "", 
+        cfg_scale = 7,
+
+        # Clip skip (ignore last layers of CLIP network; 1 ignores none, 2 ignores one layer) https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/Features#clip-skip
+        CLIP_stop_at_last_layers = 1,
+    ##
+
     # Which algorithm is used to produce the image
     sampler_name = "UniPC",
 
-    # Enable quantization in K samplers for sharper and cleaner results. This may change existing seeds. Requires restart to apply.
-    enable_quantization = True,
+    steps = 20,
+    
+    ## Denoiser arguments
+        # Enable quantization in K samplers for sharper and cleaner results. This may change existing seeds. Requires restart to apply.
+        enable_quantization = True,
+    ##
 
-    # Use old karras scheduler sigmas (0.1 to 10).
-    use_old_karras_scheduler_sigmas = False,
+    ## Seed
+        seed = 0,
+
+        # Random number generator source. (changes seeds drastically; use CPU to produce the same picture across different videocard vendors)
+        randn_source = "gpu",
+
+        # Eta noise seed delta (ENSD; does not improve anything, just produces different results for ancestral samplers - only useful for reproducing images)
+        eta_noise_seed_delta = 0,
+
+        subseed_strength = 0,
+        sub_seed = 0,
+        seed_resize_from_h = 0,
+        seed_resize_from_w = 0,
+    ##
+
+    ## Other Sampler arguments
+        s_churn = None,
+        s_tmin = None,
+        s_tmax = None, # this doesn't actually exist in the a1111 ui, but it's in the code
+        s_noise = None,
+        # Eta for ancestral samplers, noise multiplier; applies to Euler a and other samplers that have a in them
+        eta_ancestral = None,
+    ##
+    
+    ## Other Sampler sigma arguments
+        # scheduler type (lets you override the noise schedule for k-diffusion samplers; choosing Automatic disables the three parameters below)
+        k_sched_type = None,
+        
+        # sigma min (0 = default (~0.03); minimum noise strength for k-diffusion noise scheduler)
+        sigma_min = None,
+
+        # sigma max (0 = default (~14.6); maximum noise strength for k-diffusion noise schedule)
+        sigma_max = None,
+
+        #  rho (0 = default (7 for karras, 1 for polyexponential); higher values result in a more steep noise schedule (decreases faster))
+        rho = None,
+
+        # Always discard next-to-last sigma https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/6044
+        always_discard_next_to_last_sigma = False,
+
+        # Use old karras scheduler sigmas (0.1 to 10).
+        use_old_karras_scheduler_sigmas = False,
+    ##
 
     # Do not make DPM++ SDE deterministic across different batch sizes.
     no_dpmpp_sde_batch_determinism = False,
@@ -44,54 +85,26 @@ def txt2img(
     # Make K-diffusion samplers produce same images in a batch as when making a single image
     k_diffusion_batch = True,
 
-    # Random number generator source. (changes seeds drastically; use CPU to produce the same picture across different videocard vendors)
-    randn_source = "cpu",
 
-    # sampler parameters from a1111
-
-    # these affect sample_euler, sample_heun and sample_dpm_2
-    s_churn = 0.0,
-    s_tmin = 0.0,
-    s_tmax = 0.0, # this doesn't actually exist in the a1111 ui, but it's in the code
-    s_noise = 1.0,
-
-    # scheduler type (lets you override the noise schedule for k-diffusion samplers; choosing Automatic disables the three parameters below)
-    k_sched_type = "Automatic",
+    # DDIM Sampler
+        # Eta for DDIM, noise multiplier; higher = more unperdictable results
+        eta_ddim = 0.0,
+        ddim_discretize = "uniform", # quad
+    ##
     
-    # sigma min (0 = default (~0.03); minimum noise strength for k-diffusion noise scheduler)
-    sigma_min = 0,
+    ## UniPC Sampler
+        # UniPC variant
+        uni_pc_variant = "bh1", # bh2, vary_coef
 
-    # sigma max (0 = default (~14.6); maximum noise strength for k-diffusion noise schedule)
-    sigma_max = 0,
+        # UniPC skip type
+        uni_pc_skip_type = "time_uniform", # time_quadratic logSNR
 
-    #  rho (0 = default (7 for karras, 1 for polyexponential); higher values result in a more steep noise schedule (decreases faster))
-    rho = 0.0,
+        # UniPC order (must be < sampling steps)
+        uni_pc_order = 3,
 
-    # Eta noise seed delta (ENSD; does not improve anything, just produces different results for ancestral samplers - only useful for reproducing images)
-    eta_noise_seed_delta = 0,
-
-    # Eta for ancestral samplers, noise multiplier; applies to Euler a and other samplers that have a in them
-    eta_ancestral = 1.0,
-
-    # Eta for DDIM, noise multiplier; higher = more unperdictable results
-    eta_ddim = 0.0,
-
-    ddim_discretize = "uniform", # quad
-
-    # Always discard next-to-last sigma https://github.com/AUTOMATIC1111/stable-diffusion-webui/pull/6044
-    always_discard_next_to_last_sigma = False,
-
-    # UniPC variant
-    uni_pc_variant = "bh1", # bh2, vary_coef
-
-    # UniPC skip type
-    uni_pc_skip_type = "time_uniform", # time_quadratic logSNR
-
-    # UniPC order (must be < sampling steps)
-    uni_pc_order = 3,
-
-    # UniPC lower order final
-    uni_pc_lower_order_final = True,
+        # UniPC lower order final
+        uni_pc_lower_order_final = True,
+    ##
 ):
     pipe = StableDiffusionPipeline.from_single_file(
         resources.checkpoints[checkpoint], 
@@ -104,12 +117,12 @@ def txt2img(
     pipe.safety_checker = None
     pipe.enable_vae_slicing()
 
+    default_scheduler = pipe.scheduler
+
     if sampler_name == "PLMS":
-        from diffusers import PNDMScheduler
         pipe.scheduler.config.skip_prk_steps = True # https://github.com/huggingface/diffusers/issues/960
         pipe.scheduler = PNDMScheduler.from_config(pipe.scheduler.config)
     elif sampler_name == "UniPC":
-        from diffusers import UniPCMultistepScheduler
 
         pipe.scheduler.config.solver_type = uni_pc_variant
         pipe.scheduler.config.lower_order_final = uni_pc_lower_order_final
@@ -130,7 +143,6 @@ def txt2img(
 
         pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     elif sampler_name == "DDIM":
-        from diffusers import DDIMScheduler
         pipe.scheduler.config.eta = eta_ddim
 
         # some of these may not be correct
@@ -142,12 +154,25 @@ def txt2img(
             pipe.scheduler.config.timestep_spacing = "linspace"
 
         pipe.scheduler = DDIMScheduler.from_config(pipe.scheduler.config)
-    else:
-        # just some random scheduler, we won't use it
-        from diffusers import LMSDiscreteScheduler
-        pipe.scheduler = LMSDiscreteScheduler.from_config(pipe.scheduler.config)
+    elif False:
+        if sampler_name == "Euler a":
+            #pipe.scheduler.config.eta = eta_ancestral # NYI
+            #pipe.scheduler.config.s_noise = s_noise # NYI
+            #pipe.scheduler.config.s_noise = s_noise # NYI
 
-    if sampler_name == "PLMS" or sampler_name == "UniPC" or sampler_name == "DDIM":
+            pipe.scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
+        elif sampler_name == "Euler":
+            #pipe.scheduler.config.s_churn = s_churn # NYI
+            #pipe.scheduler.config.s_tmin = s_tmin # NYI
+            #pipe.scheduler.config.s_noise = s_noise # NYI
+            pipe.scheduler = EulerDiscreteScheduler.from_config(pipe.scheduler.config)
+        elif sampler_name == "Heun":
+            #pipe.scheduler.config.s_churn = s_churn # NYI
+            #pipe.scheduler.config.s_tmin = s_tmin # NYI
+            #pipe.scheduler.config.s_noise = s_noise # NYI
+            pipe.scheduler = HeunDiscreteScheduler.from_config(pipe.scheduler.config)        
+
+    if default_scheduler is not pipe.scheduler:
         images = pipe(
             num_inference_steps = steps,
             guidance_scale = cfg_scale,
@@ -171,28 +196,51 @@ def txt2img(
             ),
         ).images
     else:
-        images = kdiffusion.StableDiffusionPipeline__call__WithCustomDenoising(
-            pipe,
-            
-            randn_source = randn_source,
-            seed = seed,
-            eta_noise_seed_delta = eta_noise_seed_delta,
-            eta_ancestral = eta_ancestral,
-            seed_resize_from_h = seed_resize_from_h,
-            seed_resize_from_w = seed_resize_from_w,
-            enable_quantization = enable_quantization,
-            use_old_karras_scheduler_sigmas = use_old_karras_scheduler_sigmas,
-            always_discard_next_to_last_sigma = always_discard_next_to_last_sigma,
-            sampler_name = sampler_name,
-            k_sched_type = k_sched_type,
-            rho = rho,
-            sigma_min = sigma_min,
-            sigma_max = sigma_max,
-            s_churn = s_churn,
-            s_tmin = s_tmin,
-            s_tmax = s_tmax,
-            s_noise = s_noise,
+        pipe.scheduler = LMSDiscreteScheduler.from_config(pipe.scheduler.config)
 
+        def custom_denoise(latents, prompt_embeds, callback, callback_steps, width, height):
+            return kdiffusion.kdiffusion_sampler(
+                unet = pipe.unet,
+                alphas_cumprod = pipe.scheduler.alphas_cumprod,
+                prediction_type = pipe.scheduler.config.prediction_type,
+                progress_bar = pipe.progress_bar,
+                latents = latents,
+                num_inference_steps = steps, 
+                guidance_scale = cfg_scale, 
+                prompt_embeds = prompt_embeds, 
+                callback = callback, 
+                callback_steps = callback_steps, 
+                seed = seed, 
+                width = width, 
+                height = height,
+                eta_noise_seed_delta = eta_noise_seed_delta, 
+                seed_resize_from_h = seed_resize_from_h, 
+                seed_resize_from_w = seed_resize_from_w,
+                randn_source = randn_source,
+                
+                # passed to denoiser
+                denoiser_enable_quantization = enable_quantization,
+
+                # passed to sigma builder
+                sigma_scheduler_name = k_sched_type,
+                sigma_use_old_karras_scheduler = use_old_karras_scheduler_sigmas,
+                sigma_always_discard_next_to_last = always_discard_next_to_last_sigma,
+                sigma_rho = rho,
+                sigma_min = sigma_min,
+                sigma_max = sigma_max,
+
+                # passed to sampler function
+                sampler_name = sampler_name,
+                sampler_eta = eta_ancestral,
+                sampler_churn = s_churn,
+                sampler_tmin = s_tmin,
+                sampler_tmax = s_tmax,
+                sampler_noise = s_noise,
+            )
+
+        images = StableDiffusionPipeline__call__WithCustomDenoising(
+            pipe,
+            denoise = custom_denoise,
             num_inference_steps = steps,
             guidance_scale = cfg_scale,
             num_images_per_prompt = batch_size,

@@ -75,7 +75,7 @@ def create_random_tensors(shape, seeds, seed_delta, subseeds=None, subseed_stren
 
     return torch.stack(xs)
 
-def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=31337, batch_size=1, sub_seed=0, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, randn_source="gpu"):
+def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=0, batch_size=1, sub_seed=0, subseed_strength=0, seed_resize_from_h=0, seed_resize_from_w=0, randn_source="gpu"):
     return create_random_tensors(
         (opt_C, height // opt_f, width // opt_f), 
         [seed + i for i in range(batch_size)], eta_noise_seed_delta, 
@@ -91,7 +91,7 @@ def create_a1111_latent_noise(seed, width, height, eta_noise_seed_delta=31337, b
 # in a1111 this was done with create_random_tensors but in diffusers 
 # this is done internally using a generator. 
 # so with euler this doesn't look exactly the same but it's close enough
-def create_a1111_sampler_generator(seed, eta_noise_seed_delta=31337, randn_source="gpu"):
+def create_a1111_sampler_generator(seed, eta_noise_seed_delta=0, randn_source="gpu"):
     return torch.Generator(device=shared.gpu if randn_source == "gpu" else shared.cpu).manual_seed(seed + eta_noise_seed_delta)
 
 
